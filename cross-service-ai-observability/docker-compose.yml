@@ -1,0 +1,41 @@
+services:
+
+  gateway:
+    build:
+      context: .
+      dockerfile: services/gateway/Dockerfile
+    container_name: observability-gateway
+    ports:
+      - "8010:8000"
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+    depends_on:
+      - otel-collector
+    networks:
+      - observability-net
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: observability-otel-collector
+    command:
+      - "--config=/etc/otelcol-contrib/otel-collector-config.yaml"
+    volumes:
+      - ./observability/otel-collector/otel-collector-config.yaml:/etc/otelcol-contrib/otel-collector-config.yaml:ro
+    ports:
+      - "4317:4317"
+    depends_on:
+      - jaeger
+    networks:
+      - observability-net
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: observability-jaeger
+    ports:
+      - "16686:16686"
+    networks:
+      - observability-net
+
+networks:
+  observability-net:
+    driver: bridge
