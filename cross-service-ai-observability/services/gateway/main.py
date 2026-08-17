@@ -1,5 +1,6 @@
 from uuid import uuid4
 
+import httpx
 from fastapi import FastAPI
 from pydantic import BaseModel
 
@@ -41,8 +42,22 @@ async def health():
 async def chat(request: ChatRequest):
     request_id = str(uuid4())
 
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            "http://agent:8001/execute",
+            json={
+                "user_id": request.user_id,
+                "message": request.message,
+            },
+            timeout=10.0,
+        )
+
+    response.raise_for_status()
+
+    agent_result = response.json()
+
     return ChatResponse(
-        answer="Gateway is working.",
+        answer=agent_result["result"],
         request_id=request_id,
         prompt_version="v1",
     )

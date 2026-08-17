@@ -11,6 +11,36 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     depends_on:
       - otel-collector
+      - agent
+    networks:
+      - observability-net
+
+  agent:
+    build:
+      context: .
+      dockerfile: services/agent/Dockerfile
+    container_name: observability-agent
+    ports:
+      - "8011:8001"
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+    depends_on:
+      - otel-collector
+      - retrieval
+    networks:
+      - observability-net
+
+  retrieval:
+    build:
+      context: .
+      dockerfile: services/retrieval/Dockerfile
+    container_name: observability-retrieval
+    ports:
+      - "8012:8002"
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+    depends_on:
+      - otel-collector
     networks:
       - observability-net
 

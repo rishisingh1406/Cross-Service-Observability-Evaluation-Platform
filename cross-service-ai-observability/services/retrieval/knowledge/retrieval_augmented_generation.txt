@@ -1,0 +1,13 @@
+Retrieval Augmented Generation
+
+Retrieval Augmented Generation, commonly called RAG, combines information retrieval with language model generation. Instead of relying only on information stored in a model's parameters, a RAG system retrieves relevant external information and provides it to the generation component.
+
+A typical RAG pipeline contains several stages. First, a user submits a query. The retrieval system searches a knowledge base for relevant documents or chunks. The highest-ranked results are then passed to an agent or language model, which uses the retrieved information to produce an answer.
+
+Lexical retrieval methods such as TF-IDF and BM25 rank documents based on the relationship between query terms and document terms. These methods are useful baselines because they are fast, interpretable, and do not require an embedding model.
+
+TF-IDF gives higher importance to terms that are frequent in a document but relatively uncommon across the complete collection. BM25 extends this idea with improvements for document length normalization and term frequency saturation.
+
+Retrieval quality should be evaluated independently from generation quality. A retrieval system can be measured by inspecting whether relevant documents appear near the top of the ranking.
+
+A production RAG system can combine lexical retrieval, vector retrieval, reranking, metadata filtering, and other techniques to improve recall and precision.

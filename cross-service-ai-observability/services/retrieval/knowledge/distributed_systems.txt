@@ -1,0 +1,11 @@
+Distributed Systems
+
+A distributed system consists of multiple independent processes or services that communicate over a network to accomplish a larger task. Unlike a monolithic application, distributed systems must deal with network latency, partial failures, service discovery, retries, timeouts, and communication boundaries.
+
+Microservices are a common architecture for distributed systems. Each service is responsible for a specific capability and can be deployed and scaled independently. Services commonly communicate through HTTP APIs, message brokers, or other communication protocols.
+
+A request can travel through multiple services before a response is returned to the user. For example, a client request may reach an API gateway, which calls an agent service, which then calls a retrieval service. Observability is important because failures and latency can occur at any point in this chain.
+
+Distributed tracing connects operations from different services into a single trace. A trace contains multiple spans, where each span represents an operation performed by a service. Trace context can be propagated between services using HTTP headers.
+
+Parent and child relationships between spans allow engineers to reconstruct the execution path of a distributed request.

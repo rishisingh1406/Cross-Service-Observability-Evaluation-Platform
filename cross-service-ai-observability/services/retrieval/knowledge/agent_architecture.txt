@@ -1,0 +1,13 @@
+Agent Architecture
+
+An AI agent is a software system that can reason about a task, use tools, access information, and perform actions. Modern agent architectures commonly separate orchestration from specialized capabilities.
+
+A gateway can provide a stable API for clients while routing requests to an agent service. The agent can then call specialized services such as retrieval, memory, tools, or model providers.
+
+Separating retrieval from the agent provides several architectural benefits. Retrieval can be independently deployed, scaled, tested, and observed. The agent does not need to know how documents are indexed internally; it only needs to communicate with the retrieval API.
+
+An agent can use retrieved information as context for subsequent reasoning. In a distributed architecture, the retrieval request should remain connected to the original user request through distributed tracing.
+
+Service boundaries also create failure boundaries. The agent should be able to detect retrieval failures, enforce timeouts, and expose useful telemetry when a downstream service is unavailable.
+
+A well-designed agent platform therefore combines orchestration, tools, retrieval, memory, model access, and observability rather than placing every capability into one application.

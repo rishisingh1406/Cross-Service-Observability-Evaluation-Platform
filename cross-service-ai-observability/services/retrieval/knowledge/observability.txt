@@ -1,0 +1,13 @@
+AI System Observability
+
+Observability allows engineers to understand the internal behavior of a software system by examining telemetry produced during execution. The three common telemetry signals are traces, metrics, and logs.
+
+Distributed tracing is especially useful for systems composed of multiple AI services. A trace represents an end-to-end request, while spans represent individual operations inside that request.
+
+OpenTelemetry provides APIs, SDKs, and instrumentation libraries for generating and exporting telemetry. Applications can send telemetry to an OpenTelemetry Collector, which can process and export the data to observability backends.
+
+A useful trace should provide enough information to understand system behavior without exposing sensitive application data. Span attributes should therefore describe operational properties such as counts, durations, status values, model versions, or retrieval scores rather than storing raw user prompts or document contents.
+
+For retrieval systems, useful telemetry can include the number of documents considered, the number of returned results, the top retrieval score, the retrieval algorithm, and the latency of the search operation.
+
+Observability becomes increasingly important as an AI application grows from a single service into a distributed system containing gateways, agents, retrieval services, memory services, model services, and external APIs.
