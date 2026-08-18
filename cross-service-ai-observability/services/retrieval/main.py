@@ -57,6 +57,9 @@ async def health():
 @app.post("/search", response_model=SearchResponse)
 async def search(request: SearchRequest):
     with tracer.start_as_current_span("retrieval.search") as span:
+
+
+
         results = retriever.search(
             request.query,
             top_k=request.top_k,
