@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+pydantic
+
+httpx
+
+opentelemetry-api
+opentelemetry-sdk
+opentelemetry-exporter-otlp-proto-grpc
+opentelemetry-instrumentation-fastapi
+opentelemetry-instrumentation-httpx

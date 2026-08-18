@@ -27,6 +27,8 @@ services:
     depends_on:
       - otel-collector
       - retrieval
+      - memory
+      - llm
     networks:
       - observability-net
 
@@ -37,6 +39,37 @@ services:
     container_name: observability-retrieval
     ports:
       - "8012:8002"
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+    depends_on:
+      - otel-collector
+    networks:
+      - observability-net
+
+  memory:
+    build:
+      context: .
+      dockerfile: services/memory/Dockerfile
+    container_name: observability-memory
+    ports:
+      - "8013:8003"
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      MEMORY_DB_PATH: /data/memory.db
+    volumes:
+      - memory-data:/data
+    depends_on:
+      - otel-collector
+    networks:
+      - observability-net
+
+  llm:
+    build:
+      context: .
+      dockerfile: services/llm/Dockerfile
+    container_name: observability-llm
+    ports:
+      - "8014:8004"
     environment:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     depends_on:
@@ -69,3 +102,6 @@ services:
 networks:
   observability-net:
     driver: bridge
+
+volumes:
+  memory-data:
