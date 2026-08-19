@@ -8,6 +8,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY services/agent /app
 COPY libs/otel_common /app/otel_common
+COPY prompts /app/prompts
 
 ENV PYTHONPATH=/app
 

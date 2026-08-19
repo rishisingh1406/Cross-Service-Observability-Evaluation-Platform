@@ -1,0 +1,6 @@
+{
+  "agent": {
+    "version": "v1.0.0",
+    "prompt_path": "prompts/agent/system.txt"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "timestamp": "2026-08-19T10:08:28.604506+00:00",
+  "prompt_version": "v1.0.0",
+  "model": "mock-v1",
+  "suites": {
+    "rag": {
+      "passed": 0,
+      "failed": 0,
+      "skipped": 0,
+      "errors": 0,
+      "total": 0,
+      "score": null,
+      "exit_code": 5
+    },
+    "agent": {
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0,
+      "errors": 0,
+      "total": 10,
+      "score": 1.0,
+      "exit_code": 0
+    }
+  },
+  "overall": {
+    "passed": 10,
+    "failed": 0,
+    "total": 10,
+    "score": 1.0
+  }
+}

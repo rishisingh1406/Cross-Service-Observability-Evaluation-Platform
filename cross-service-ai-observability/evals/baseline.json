@@ -1,0 +1,26 @@
+{
+  "prompt_version": "v1.0.0",
+  "model": "mock-v1",
+  "baseline": {
+    "suites": {
+      "rag": {
+        "passed": 0,
+        "failed": 0,
+        "total": 0,
+        "score": null
+      },
+      "agent": {
+        "passed": 10,
+        "failed": 0,
+        "total": 10,
+        "score": 1.0
+      }
+    },
+    "overall": {
+      "passed": 10,
+      "failed": 0,
+      "total": 10,
+      "score": 1.0
+    }
+  }
+}

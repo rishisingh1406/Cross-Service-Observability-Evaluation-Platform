@@ -1,5 +1,7 @@
-import httpx
+import json
+from pathlib import Path
 
+import httpx
 from fastapi import FastAPI
 from pydantic import BaseModel
 
@@ -7,6 +9,45 @@ from opentelemetry import trace
 
 from otel_common.tracing import configure_tracing
 
+
+# ============================================================
+# PROJECT / PROMPT CONFIGURATION
+# ============================================================
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+
+PROMPT_REGISTRY_PATH = (
+    PROJECT_ROOT / "prompts" / "registry.json"
+)
+
+with open(
+    PROMPT_REGISTRY_PATH,
+    "r",
+    encoding="utf-8",
+) as f:
+    PROMPT_REGISTRY = json.load(f)
+
+
+AGENT_PROMPT_VERSION = (
+    PROMPT_REGISTRY["agent"]["version"]
+)
+
+AGENT_PROMPT_PATH = (
+    PROJECT_ROOT
+    / PROMPT_REGISTRY["agent"]["prompt_path"]
+)
+
+with open(
+    AGENT_PROMPT_PATH,
+    "r",
+    encoding="utf-8",
+) as f:
+    AGENT_SYSTEM_PROMPT = f.read()
+
+
+# ============================================================
+# APPLICATION
+# ============================================================
 
 app = FastAPI(
     title="Cross-Service AI Observability - Agent",
@@ -27,20 +68,22 @@ class ExecuteRequest(BaseModel):
 class ExecuteResponse(BaseModel):
     result: str
     service: str
+    prompt_version: str
+    model: str | None = None
 
 
 # ============================================================
 # OPEN TELEMETRY
 # ============================================================
 
-
 configure_tracing(
     service_name="agent-service",
     app=app,
 )
 
-
-tracer = trace.get_tracer("agent-service")
+tracer = trace.get_tracer(
+    "agent-service"
+)
 
 
 # ============================================================
@@ -63,7 +106,6 @@ def determine_route(message: str) -> str:
 
     - direct:
         Simple conversational requests.
-
     """
 
     text = message.lower().strip()
@@ -99,10 +141,16 @@ def determine_route(message: str) -> str:
         "what do you know about me",
     ]
 
-    if any(keyword in text for keyword in memory_keywords):
+    if any(
+        keyword in text
+        for keyword in memory_keywords
+    ):
         return "memory"
 
-    if any(keyword in text for keyword in retrieval_keywords):
+    if any(
+        keyword in text
+        for keyword in retrieval_keywords
+    ):
         return "retrieval"
 
     return "direct"
@@ -118,6 +166,7 @@ async def health():
     return {
         "status": "healthy",
         "service": "agent-service",
+        "prompt_version": AGENT_PROMPT_VERSION,
     }
 
 
@@ -130,17 +179,35 @@ async def health():
     "/execute",
     response_model=ExecuteResponse,
 )
-async def execute(request: ExecuteRequest):
+async def execute(
+    request: ExecuteRequest,
+):
 
     with tracer.start_as_current_span(
         "agent.execute"
     ) as span:
 
-        # ----------------------------------------------------
-        # 1. Determine route
-        # ----------------------------------------------------
+        # ====================================================
+        # PROMPT METADATA
+        # ====================================================
 
-        route = determine_route(request.message)
+        span.set_attribute(
+            "agent.prompt.version",
+            AGENT_PROMPT_VERSION,
+        )
+
+        span.set_attribute(
+            "agent.prompt.path",
+            PROMPT_REGISTRY["agent"]["prompt_path"],
+        )
+
+        # ====================================================
+        # ROUTING
+        # ====================================================
+
+        route = determine_route(
+            request.message
+        )
 
         span.set_attribute(
             "agent.routing.route",
@@ -152,14 +219,8 @@ async def execute(request: ExecuteRequest):
             len(request.message),
         )
 
-        # These attributes are extremely important for
-        # Project 7 routing evaluation.
-        #
-        # The evaluator can inspect the trace and determine:
-        #
-        # expected route == actual route
-        #
-        # rather than judging the generated text.
+        # These attributes are used by the Day 77
+        # routing evaluation suite.
 
         span.set_attribute(
             "agent.routing.retrieval_expected",
@@ -180,9 +241,9 @@ async def execute(request: ExecuteRequest):
         memory_data = None
         llm_data = None
 
-        # ----------------------------------------------------
-        # HTTP client
-        # ----------------------------------------------------
+        # ====================================================
+        # HTTP CLIENT
+        # ====================================================
 
         async with httpx.AsyncClient() as client:
 
@@ -201,13 +262,15 @@ async def execute(request: ExecuteRequest):
                         "retrieval",
                     )
 
-                    retrieval_response = await client.post(
-                        "http://retrieval:8002/search",
-                        json={
-                            "query": request.message,
-                            "top_k": 3,
-                        },
-                        timeout=10.0,
+                    retrieval_response = (
+                        await client.post(
+                            "http://retrieval:8002/search",
+                            json={
+                                "query": request.message,
+                                "top_k": 3,
+                            },
+                            timeout=10.0,
+                        )
                     )
 
                     retrieval_response.raise_for_status()
@@ -216,7 +279,9 @@ async def execute(request: ExecuteRequest):
                         retrieval_response.json()
                     )
 
-                    results = retrieval_data["results"]
+                    results = (
+                        retrieval_data["results"]
+                    )
 
                     span.set_attribute(
                         "agent.retrieval.called",
@@ -250,13 +315,15 @@ async def execute(request: ExecuteRequest):
                         "memory",
                     )
 
-                    memory_response = await client.post(
-                        "http://memory:8003/memory",
-                        json={
-                            "user_id": request.user_id,
-                            "content": request.message,
-                        },
-                        timeout=10.0,
+                    memory_response = (
+                        await client.post(
+                            "http://memory:8003/memory",
+                            json={
+                                "user_id": request.user_id,
+                                "content": request.message,
+                            },
+                            timeout=10.0,
+                        )
                     )
 
                     memory_response.raise_for_status()
@@ -283,15 +350,18 @@ async def execute(request: ExecuteRequest):
                 )
 
             # =================================================
-            # DIRECT / RETRIEVAL / MEMORY → LLM
+            # BUILD VERSIONED LLM PROMPT
             # =================================================
 
-            llm_prompt = (
-                f"User question: {request.message}\n\n"
-                f"Retrieved context: {results}\n\n"
-                f"Memory: {memory_data}\n\n"
-                f"Answer the user clearly."
+            llm_prompt = AGENT_SYSTEM_PROMPT.format(
+                user_message=request.message,
+                retrieved_context=results,
+                memory=memory_data,
             )
+
+            # =================================================
+            # LLM ROUTE
+            # =================================================
 
             with tracer.start_as_current_span(
                 "agent.route.llm"
@@ -302,18 +372,27 @@ async def execute(request: ExecuteRequest):
                     route,
                 )
 
-                llm_response = await client.post(
-                    "http://llm:8004/generate",
-                    json={
-                        "user_id": request.user_id,
-                        "prompt": llm_prompt,
-                    },
-                    timeout=10.0,
+                route_span.set_attribute(
+                    "agent.prompt.version",
+                    AGENT_PROMPT_VERSION,
+                )
+
+                llm_response = (
+                    await client.post(
+                        "http://llm:8004/generate",
+                        json={
+                            "user_id": request.user_id,
+                            "prompt": llm_prompt,
+                        },
+                        timeout=10.0,
+                    )
                 )
 
                 llm_response.raise_for_status()
 
-                llm_data = llm_response.json()
+                llm_data = (
+                    llm_response.json()
+                )
 
                 span.set_attribute(
                     "agent.llm.called",
@@ -322,8 +401,25 @@ async def execute(request: ExecuteRequest):
 
                 span.set_attribute(
                     "agent.llm.provider",
-                    llm_data["provider"],
+                    llm_data.get(
+                        "provider",
+                        "unknown",
+                    ),
                 )
+
+                # ------------------------------------------------
+                # MODEL METADATA
+                # ------------------------------------------------
+
+                model_name = llm_data.get(
+                    "model"
+                )
+
+                if model_name:
+                    span.set_attribute(
+                        "agent.llm.model",
+                        model_name,
+                    )
 
         # ====================================================
         # FINAL RESPONSE
@@ -334,4 +430,6 @@ async def execute(request: ExecuteRequest):
         return ExecuteResponse(
             result=answer,
             service="agent-service",
+            prompt_version=AGENT_PROMPT_VERSION,
+            model=llm_data.get("model"),
         )
