@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-08-19T14:29:34.759010+00:00",
+  "timestamp": "2026-08-20T17:58:20.352411+00:00",
   "prompt_version": "v1.0.0",
   "model": "mock-v1",
   "suites": {
@@ -22,20 +22,32 @@
       "exit_code": 0
     },
     "prompt": {
-      "passed": 2,
-      "failed": 0,
+      "passed": 1,
+      "failed": 1,
       "skipped": 0,
       "errors": 0,
       "total": 2,
-      "score": 1.0,
-      "failures": [],
-      "exit_code": 0
+      "score": 0.5,
+      "failures": [
+        {
+          "case": "policy_answer_cites_sources",
+          "failure": "Prompt does not contain the policy-source citation instruction."
+        }
+      ],
+      "exit_code": 1
     }
   },
+  "prompt_regression": {
+    "baseline": 1.0,
+    "current": 0.5,
+    "change": -0.5,
+    "change_percent": -50.0,
+    "regression": true
+  },
   "overall": {
-    "passed": 12,
-    "failed": 0,
+    "passed": 11,
+    "failed": 1,
     "total": 12,
-    "score": 1.0
+    "score": 0.9167
   }
 }

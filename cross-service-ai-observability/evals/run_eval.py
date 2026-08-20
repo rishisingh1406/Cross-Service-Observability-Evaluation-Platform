@@ -5,9 +5,22 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
 
+
+# ============================================================
+# PROJECT PATH
+# ============================================================
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+# Make the project root importable so that:
+# from evals.prompt...
+# works when this file is executed directly.
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+
 from evals.prompt.cases import PROMPT_CASES
 from evals.prompt.evaluator import evaluate_prompt_case
-
 
 # ============================================================
 # PATHS
@@ -16,7 +29,15 @@ from evals.prompt.evaluator import evaluate_prompt_case
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 RESULTS_PATH = PROJECT_ROOT / "evals" / "results.json"
+
 REGISTRY_PATH = PROJECT_ROOT / "prompts" / "registry.json"
+
+PROMPT_BASELINE_PATH = (
+    PROJECT_ROOT
+    / "evals"
+    / "prompt"
+    / "baseline.json"
+)
 
 JUNIT_DIR = PROJECT_ROOT / "evals" / ".junit"
 
@@ -39,6 +60,7 @@ AGENT_PROMPT_PATH = (
     PROJECT_ROOT
     / prompt_registry["agent"]["prompt_path"]
 )
+
 
 with open(
     AGENT_PROMPT_PATH,
@@ -173,9 +195,11 @@ def run_prompt_evaluation():
         )
 
         if result.passed:
+
             passed += 1
 
         else:
+
             failed += 1
 
             failures.append(
@@ -209,13 +233,166 @@ def run_prompt_evaluation():
 
 
 # ============================================================
+# PROMPT REGRESSION
+# ============================================================
+
+def load_prompt_baseline():
+    """
+    Load the expected healthy prompt behavior score.
+
+    utf-8-sig is used so the evaluator works with both:
+    - normal UTF-8 JSON
+    - UTF-8 JSON files containing a Windows BOM
+    """
+
+    if not PROMPT_BASELINE_PATH.exists():
+        raise FileNotFoundError(
+            f"Prompt baseline file not found: "
+            f"{PROMPT_BASELINE_PATH}"
+        )
+
+    with open(
+        PROMPT_BASELINE_PATH,
+        "r",
+        encoding="utf-8-sig",
+    ) as f:
+        baseline = json.load(f)
+
+    if "prompt_behavior_score" not in baseline:
+        raise ValueError(
+            "Prompt baseline must contain "
+            "'prompt_behavior_score'."
+        )
+
+    return float(
+        baseline["prompt_behavior_score"]
+    )
+
+
+def evaluate_prompt_regression(
+    current_score,
+):
+    baseline_score = load_prompt_baseline()
+
+    if current_score is None:
+
+        return {
+            "baseline": baseline_score,
+            "current": None,
+            "change": None,
+            "change_percent": None,
+            "regression": False,
+        }
+
+    change = round(
+        current_score - baseline_score,
+        4,
+    )
+
+    change_percent = (
+        round(
+            (change / baseline_score) * 100,
+            2,
+        )
+        if baseline_score != 0
+        else 0.0
+    )
+
+    regression = (
+        current_score < baseline_score
+    )
+
+    return {
+        "baseline": baseline_score,
+        "current": current_score,
+        "change": change,
+        "change_percent": change_percent,
+        "regression": regression,
+    }
+
+
+def print_prompt_regression_table(
+    regression,
+):
+
+    print()
+    print("=" * 70)
+    print("PROMPT REGRESSION TABLE")
+    print("=" * 70)
+
+    print(
+        f"{'Metric':<28}"
+        f"{'Baseline':>12}"
+        f"{'Current':>12}"
+        f"{'Change':>12}"
+    )
+
+    print("-" * 70)
+
+    baseline = regression["baseline"]
+    current = regression["current"]
+    change_percent = regression["change_percent"]
+
+    if current is None:
+
+        print(
+            f"{'Prompt Behavior Score':<28}"
+            f"{baseline:>11.2%}"
+            f"{'N/A':>12}"
+            f"{'N/A':>12}"
+        )
+
+    else:
+
+        print(
+            f"{'Prompt Behavior Score':<28}"
+            f"{baseline:>11.2%}"
+            f"{current:>11.2%}"
+            f"{change_percent:>11.2f}%"
+        )
+
+    print("-" * 70)
+
+    if regression["regression"]:
+
+        print()
+        print(
+            "❌ PROMPT REGRESSION DETECTED"
+        )
+
+        print(
+            f"Baseline: "
+            f"{baseline:.2%}"
+        )
+
+        print(
+            f"Current:  "
+            f"{current:.2%}"
+        )
+
+        print(
+            f"Drop:     "
+            f"{abs(change_percent):.2f}%"
+        )
+
+    else:
+
+        print()
+        print(
+            "✅ NO PROMPT REGRESSION DETECTED"
+        )
+
+
+# ============================================================
 # MAIN
 # ============================================================
 
 def main():
 
     print("=" * 70)
-    print("DAY 80 — PROMPT REGRESSION EVALUATION")
+    print(
+        "DAY 80 — PROMPT REGRESSION EVALUATION"
+    )
     print("=" * 70)
 
     print(
@@ -229,7 +406,9 @@ def main():
     # RAG
     # --------------------------------------------------------
 
-    print("Running RAG evaluation...")
+    print(
+        "Running RAG evaluation..."
+    )
 
     rag_results = run_pytest(
         "evals/rag",
@@ -254,7 +433,9 @@ def main():
     # AGENT
     # --------------------------------------------------------
 
-    print("Running Agent evaluation...")
+    print(
+        "Running Agent evaluation..."
+    )
 
     agent_results = run_pytest(
         "evals/agent",
@@ -272,7 +453,9 @@ def main():
     # --------------------------------------------------------
 
     print()
-    print("Running Prompt evaluation...")
+    print(
+        "Running Prompt evaluation..."
+    )
 
     prompt_results = run_prompt_evaluation()
 
@@ -289,6 +472,20 @@ def main():
             f"{failure['case']} | "
             f"{failure['failure']}"
         )
+
+    # --------------------------------------------------------
+    # PROMPT REGRESSION CHECK
+    # --------------------------------------------------------
+
+    prompt_regression = (
+        evaluate_prompt_regression(
+            prompt_results["score"]
+        )
+    )
+
+    print_prompt_regression_table(
+        prompt_regression
+    )
 
     # --------------------------------------------------------
     # AGGREGATE
@@ -341,6 +538,10 @@ def main():
         "model": "mock-v1",
 
         "suites": suites,
+
+        "prompt_regression": (
+            prompt_regression
+        ),
 
         "overall": {
             "passed": total_passed,
@@ -399,7 +600,9 @@ def main():
         f"{agent_prompt_version}"
     )
 
-    print("Model: mock-v1")
+    print(
+        "Model: mock-v1"
+    )
 
     print()
     print(
@@ -411,12 +614,25 @@ def main():
     # FAIL EVALUATION
     # --------------------------------------------------------
 
-    if total_failed > 0:
+    if (
+        total_failed > 0
+        or prompt_regression["regression"]
+    ):
 
         print()
         print(
             "EVALUATION FAILED"
         )
+
+        if prompt_regression["regression"]:
+
+            print(
+                "Reason: prompt behavior score "
+                "regressed from "
+                f"{prompt_regression['baseline']:.2%} "
+                "to "
+                f"{prompt_regression['current']:.2%}."
+            )
 
         raise SystemExit(1)
 

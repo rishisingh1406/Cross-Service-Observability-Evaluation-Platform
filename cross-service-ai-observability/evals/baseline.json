@@ -14,12 +14,19 @@
         "failed": 0,
         "total": 10,
         "score": 1.0
+      },
+      "prompt": {
+        "passed": 2,
+        "failed": 0,
+        "total": 2,
+        "score": 1.0
       }
     },
+    "prompt_behavior_score": 1.0,
     "overall": {
-      "passed": 10,
+      "passed": 12,
       "failed": 0,
-      "total": 10,
+      "total": 12,
       "score": 1.0
     }
   }

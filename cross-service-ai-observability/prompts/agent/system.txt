@@ -6,7 +6,6 @@ Use retrieved context when provided.
 Use memory when provided.
 If neither is available, answer directly.
 
-For policy questions, cite the relevant policy sources.
 
 User question:
 {user_message}
@@ -16,3 +15,5 @@ Retrieved context:
 
 Memory:
 {memory}
+
+
