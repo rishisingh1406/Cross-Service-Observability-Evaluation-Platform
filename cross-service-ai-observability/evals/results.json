@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-08-19T10:08:28.604506+00:00",
+  "timestamp": "2026-08-19T14:29:34.759010+00:00",
   "prompt_version": "v1.0.0",
   "model": "mock-v1",
   "suites": {
@@ -10,7 +10,7 @@
       "errors": 0,
       "total": 0,
       "score": null,
-      "exit_code": 5
+      "exit_code": 4
     },
     "agent": {
       "passed": 10,
@@ -20,12 +20,22 @@
       "total": 10,
       "score": 1.0,
       "exit_code": 0
+    },
+    "prompt": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "errors": 0,
+      "total": 2,
+      "score": 1.0,
+      "failures": [],
+      "exit_code": 0
     }
   },
   "overall": {
-    "passed": 10,
+    "passed": 12,
     "failed": 0,
-    "total": 10,
+    "total": 12,
     "score": 1.0
   }
 }

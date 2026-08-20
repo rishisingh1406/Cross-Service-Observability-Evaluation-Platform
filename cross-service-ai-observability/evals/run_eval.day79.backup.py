@@ -1,12 +1,9 @@
-﻿import json
+import json
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
-
-from evals.prompt.cases import PROMPT_CASES
-from evals.prompt.evaluator import evaluate_prompt_case
 
 
 # ============================================================
@@ -33,19 +30,9 @@ with open(
     prompt_registry = json.load(f)
 
 
-agent_prompt_version = prompt_registry["agent"]["version"]
-
-AGENT_PROMPT_PATH = (
-    PROJECT_ROOT
-    / prompt_registry["agent"]["prompt_path"]
+agent_prompt_version = (
+    prompt_registry["agent"]["version"]
 )
-
-with open(
-    AGENT_PROMPT_PATH,
-    "r",
-    encoding="utf-8",
-) as f:
-    agent_system_prompt = f.read()
 
 
 # ============================================================
@@ -56,12 +43,21 @@ def run_pytest(
     test_path: str,
     junit_name: str,
 ):
+    """
+    Run a pytest suite and return structured results.
+
+    Pytest writes JUnit XML so that this evaluator does not
+    depend on parsing human-readable terminal output.
+    """
+
     JUNIT_DIR.mkdir(
         parents=True,
         exist_ok=True,
     )
 
-    junit_path = JUNIT_DIR / junit_name
+    junit_path = (
+        JUNIT_DIR / junit_name
+    )
 
     result = subprocess.run(
         [
@@ -77,10 +73,14 @@ def run_pytest(
         text=True,
     )
 
+    passed = 0
     failed = 0
     skipped = 0
     errors = 0
-    total = 0
+
+    # --------------------------------------------------------
+    # Parse JUnit XML
+    # --------------------------------------------------------
 
     if junit_path.exists():
 
@@ -100,7 +100,7 @@ def run_pytest(
 
         for suite in test_suites:
 
-            total += int(
+            passed += int(
                 suite.attrib.get(
                     "tests",
                     0,
@@ -128,12 +128,23 @@ def run_pytest(
                 )
             )
 
-    actual_passed = (
-        total
-        - failed
-        - errors
-        - skipped
-    )
+        total = passed
+
+        actual_passed = (
+            total
+            - failed
+            - errors
+            - skipped
+        )
+
+    else:
+
+        total = 0
+        actual_passed = 0
+
+    # --------------------------------------------------------
+    # Score
+    # --------------------------------------------------------
 
     score = (
         round(
@@ -156,67 +167,14 @@ def run_pytest(
 
 
 # ============================================================
-# PROMPT EVALUATION
-# ============================================================
-
-def run_prompt_evaluation():
-
-    passed = 0
-    failed = 0
-    failures = []
-
-    for case in PROMPT_CASES:
-
-        result = evaluate_prompt_case(
-            case,
-            agent_system_prompt,
-        )
-
-        if result.passed:
-            passed += 1
-
-        else:
-            failed += 1
-
-            failures.append(
-                {
-                    "case": result.case_name,
-                    "failure": result.failure,
-                }
-            )
-
-    total = len(PROMPT_CASES)
-
-    score = (
-        round(
-            passed / total,
-            4,
-        )
-        if total > 0
-        else None
-    )
-
-    return {
-        "passed": passed,
-        "failed": failed,
-        "skipped": 0,
-        "errors": 0,
-        "total": total,
-        "score": score,
-        "failures": failures,
-        "exit_code": 0 if failed == 0 else 1,
-    }
-
-
-# ============================================================
 # MAIN
 # ============================================================
 
 def main():
 
-    print("=" * 70)
-    print("DAY 80 — PROMPT REGRESSION EVALUATION")
-    print("=" * 70)
+    print("=" * 60)
+    print("DAY 78 — BASELINE EVALUATION")
+    print("=" * 60)
 
     print(
         f"Prompt version: "
@@ -239,7 +197,8 @@ def main():
     if rag_results["total"] == 0:
 
         print(
-            "RAG: 0 tests (not evaluated)"
+            "RAG: 0 tests "
+            "(not evaluated)"
         )
 
     else:
@@ -268,36 +227,12 @@ def main():
     )
 
     # --------------------------------------------------------
-    # PROMPT
-    # --------------------------------------------------------
-
-    print()
-    print("Running Prompt evaluation...")
-
-    prompt_results = run_prompt_evaluation()
-
-    print(
-        f"Prompt: "
-        f"{prompt_results['passed']}/"
-        f"{prompt_results['total']} passed"
-    )
-
-    for failure in prompt_results["failures"]:
-
-        print(
-            f"FAIL | "
-            f"{failure['case']} | "
-            f"{failure['failure']}"
-        )
-
-    # --------------------------------------------------------
     # AGGREGATE
     # --------------------------------------------------------
 
     suites = {
         "rag": rag_results,
         "agent": agent_results,
-        "prompt": prompt_results,
     }
 
     total_passed = sum(
@@ -340,7 +275,10 @@ def main():
 
         "model": "mock-v1",
 
-        "suites": suites,
+        "suites": {
+            "rag": rag_results,
+            "agent": agent_results,
+        },
 
         "overall": {
             "passed": total_passed,
@@ -371,9 +309,9 @@ def main():
     # --------------------------------------------------------
 
     print()
-    print("=" * 70)
+    print("=" * 60)
     print("RESULTS")
-    print("=" * 70)
+    print("=" * 60)
 
     print(
         f"Overall: "
@@ -384,7 +322,8 @@ def main():
     if overall_score is None:
 
         print(
-            "Score: N/A — no tests collected"
+            "Score: "
+            "N/A — no tests collected"
         )
 
     else:
@@ -399,7 +338,9 @@ def main():
         f"{agent_prompt_version}"
     )
 
-    print("Model: mock-v1")
+    print(
+        "Model: mock-v1"
+    )
 
     print()
     print(
@@ -408,22 +349,11 @@ def main():
     )
 
     # --------------------------------------------------------
-    # FAIL EVALUATION
+    # Fail the evaluator if any actual tests failed
     # --------------------------------------------------------
 
     if total_failed > 0:
-
-        print()
-        print(
-            "EVALUATION FAILED"
-        )
-
         raise SystemExit(1)
-
-    print()
-    print(
-        "EVALUATION PASSED"
-    )
 
 
 if __name__ == "__main__":
