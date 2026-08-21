@@ -99,6 +99,18 @@ services:
     networks:
       - observability-net
 
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: observability-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - memory
+    networks:
+      - observability-net
+
 networks:
   observability-net:
     driver: bridge
