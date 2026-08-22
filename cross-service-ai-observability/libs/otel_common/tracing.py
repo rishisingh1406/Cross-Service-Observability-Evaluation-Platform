@@ -1,7 +1,9 @@
 import os
 
 from opentelemetry import trace
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
+    OTLPSpanExporter,
+)
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.sdk.resources import Resource
@@ -13,6 +15,11 @@ def configure_tracing(
     service_name: str,
     app,
 ) -> None:
+
+    # ============================================================
+    # RESOURCE
+    # ============================================================
+
     resource = Resource.create(
         {
             "service.name": service_name,
@@ -21,7 +28,17 @@ def configure_tracing(
         }
     )
 
-    provider = TracerProvider(resource=resource)
+    # ============================================================
+    # TRACE PROVIDER
+    # ============================================================
+
+    provider = TracerProvider(
+        resource=resource
+    )
+
+    # ============================================================
+    # OTLP EXPORTER
+    # ============================================================
 
     otlp_endpoint = os.getenv(
         "OTEL_EXPORTER_OTLP_ENDPOINT",
@@ -33,12 +50,39 @@ def configure_tracing(
         insecure=True,
     )
 
+    # ============================================================
+    # SPAN PROCESSOR
+    # ============================================================
+
     provider.add_span_processor(
         BatchSpanProcessor(exporter)
     )
 
     trace.set_tracer_provider(provider)
 
-    FastAPIInstrumentor.instrument_app(app)
+    # ============================================================
+    # FASTAPI INSTRUMENTATION
+    # ============================================================
+    #
+    # Prometheus continuously calls /metrics.
+    #
+    # We do NOT want those monitoring requests appearing
+    # as application traces.
+    #
+    # This keeps our traces focused on actual application
+    # traffic:
+    #
+    # gateway → agent → retrieval/memory → llm
+    #
+    # ============================================================
+
+    FastAPIInstrumentor.instrument_app(
+        app,
+        excluded_urls="/metrics",
+    )
+
+    # ============================================================
+    # HTTPX INSTRUMENTATION
+    # ============================================================
 
     HTTPXClientInstrumentor().instrument()

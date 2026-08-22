@@ -1,4 +1,5 @@
 import json
+import time
 from pathlib import Path
 
 import httpx
@@ -6,6 +7,11 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 
 from opentelemetry import trace
+from prometheus_client import (
+    Counter,
+    Histogram,
+    make_asgi_app,
+)
 
 from otel_common.tracing import configure_tracing
 
@@ -53,6 +59,44 @@ app = FastAPI(
     title="Cross-Service AI Observability - Agent",
     version="1.0.0",
 )
+
+
+# ============================================================
+# PROMETHEUS METRICS
+# ============================================================
+
+agent_requests_total = Counter(
+    "agent_requests_total",
+    "Total number of agent execution requests",
+    ["route"],
+)
+
+agent_request_duration_seconds = Histogram(
+    "agent_request_duration_seconds",
+    "Agent execution latency in seconds",
+    ["route"],
+)
+
+agent_llm_requests_total = Counter(
+    "agent_llm_requests_total",
+    "Total number of LLM requests made by the agent",
+    ["model"],
+)
+
+agent_retrieval_requests_total = Counter(
+    "agent_retrieval_requests_total",
+    "Total number of retrieval requests made by the agent",
+)
+
+agent_memory_requests_total = Counter(
+    "agent_memory_requests_total",
+    "Total number of memory requests made by the agent",
+)
+
+
+# Expose Prometheus metrics at /metrics
+metrics_app = make_asgi_app()
+app.mount("/metrics", metrics_app)
 
 
 # ============================================================
@@ -183,253 +227,291 @@ async def execute(
     request: ExecuteRequest,
 ):
 
-    with tracer.start_as_current_span(
-        "agent.execute"
-    ) as span:
+    # Determine route before starting the main operation
+    # so that Prometheus can record the correct route even
+    # if an exception occurs later.
+    route = determine_route(
+        request.message
+    )
 
-        # ====================================================
-        # PROMPT METADATA
-        # ====================================================
+    start_time = time.perf_counter()
 
-        span.set_attribute(
-            "agent.prompt.version",
-            AGENT_PROMPT_VERSION,
-        )
+    try:
 
-        span.set_attribute(
-            "agent.prompt.path",
-            PROMPT_REGISTRY["agent"]["prompt_path"],
-        )
+        with tracer.start_as_current_span(
+            "agent.execute"
+        ) as span:
 
-        # ====================================================
-        # ROUTING
-        # ====================================================
+            # ====================================================
+            # PROMPT METADATA
+            # ====================================================
 
-        route = determine_route(
-            request.message
-        )
+            span.set_attribute(
+                "agent.prompt.version",
+                AGENT_PROMPT_VERSION,
+            )
 
-        span.set_attribute(
-            "agent.routing.route",
-            route,
-        )
+            span.set_attribute(
+                "agent.prompt.path",
+                PROMPT_REGISTRY["agent"]["prompt_path"],
+            )
 
-        span.set_attribute(
-            "agent.routing.message_length",
-            len(request.message),
-        )
+            # ====================================================
+            # ROUTING
+            # ====================================================
 
-        # These attributes are used by the Day 77
-        # routing evaluation suite.
+            span.set_attribute(
+                "agent.routing.route",
+                route,
+            )
 
-        span.set_attribute(
-            "agent.routing.retrieval_expected",
-            route == "retrieval",
-        )
+            span.set_attribute(
+                "agent.routing.message_length",
+                len(request.message),
+            )
 
-        span.set_attribute(
-            "agent.routing.memory_expected",
-            route == "memory",
-        )
+            # These attributes are used by the Day 77
+            # routing evaluation suite.
 
-        span.set_attribute(
-            "agent.routing.direct_expected",
-            route == "direct",
-        )
+            span.set_attribute(
+                "agent.routing.retrieval_expected",
+                route == "retrieval",
+            )
 
-        results = []
-        memory_data = None
-        llm_data = None
+            span.set_attribute(
+                "agent.routing.memory_expected",
+                route == "memory",
+            )
 
-        # ====================================================
-        # HTTP CLIENT
-        # ====================================================
+            span.set_attribute(
+                "agent.routing.direct_expected",
+                route == "direct",
+            )
 
-        async with httpx.AsyncClient() as client:
+            results = []
+            memory_data = None
+            llm_data = None
 
-            # =================================================
-            # RETRIEVAL ROUTE
-            # =================================================
+            # ====================================================
+            # HTTP CLIENT
+            # ====================================================
 
-            if route == "retrieval":
+            async with httpx.AsyncClient() as client:
 
-                with tracer.start_as_current_span(
-                    "agent.route.retrieval"
-                ) as route_span:
+                # =================================================
+                # RETRIEVAL ROUTE
+                # =================================================
 
-                    route_span.set_attribute(
-                        "agent.route",
-                        "retrieval",
-                    )
+                if route == "retrieval":
 
-                    retrieval_response = (
-                        await client.post(
-                            "http://retrieval:8002/search",
-                            json={
-                                "query": request.message,
-                                "top_k": 3,
-                            },
-                            timeout=10.0,
+                    with tracer.start_as_current_span(
+                        "agent.route.retrieval"
+                    ) as route_span:
+
+                        route_span.set_attribute(
+                            "agent.route",
+                            "retrieval",
                         )
-                    )
 
-                    retrieval_response.raise_for_status()
+                        retrieval_response = (
+                            await client.post(
+                                "http://retrieval:8002/search",
+                                json={
+                                    "query": request.message,
+                                    "top_k": 3,
+                                },
+                                timeout=10.0,
+                            )
+                        )
 
-                    retrieval_data = (
-                        retrieval_response.json()
-                    )
+                        retrieval_response.raise_for_status()
 
-                    results = (
-                        retrieval_data["results"]
-                    )
+                        retrieval_data = (
+                            retrieval_response.json()
+                        )
+
+                        results = (
+                            retrieval_data["results"]
+                        )
+
+                        agent_retrieval_requests_total.inc()
+
+                        span.set_attribute(
+                            "agent.retrieval.called",
+                            True,
+                        )
+
+                        span.set_attribute(
+                            "agent.retrieval.result_count",
+                            len(results),
+                        )
+
+                else:
 
                     span.set_attribute(
                         "agent.retrieval.called",
-                        True,
+                        False,
                     )
+
+                # =================================================
+                # MEMORY ROUTE
+                # =================================================
+
+                if route == "memory":
+
+                    with tracer.start_as_current_span(
+                        "agent.route.memory"
+                    ) as route_span:
+
+                        route_span.set_attribute(
+                            "agent.route",
+                            "memory",
+                        )
+
+                        memory_response = (
+                            await client.post(
+                                "http://memory:8003/memory",
+                                json={
+                                    "user_id": request.user_id,
+                                    "content": request.message,
+                                },
+                                timeout=10.0,
+                            )
+                        )
+
+                        memory_response.raise_for_status()
+
+                        memory_data = (
+                            memory_response.json()
+                        )
+
+                        agent_memory_requests_total.inc()
+
+                        span.set_attribute(
+                            "agent.memory.called",
+                            True,
+                        )
+
+                        span.set_attribute(
+                            "agent.memory.id",
+                            memory_data["id"],
+                        )
+
+                else:
 
                     span.set_attribute(
-                        "agent.retrieval.result_count",
-                        len(results),
+                        "agent.memory.called",
+                        False,
                     )
 
-            else:
+                # =================================================
+                # BUILD VERSIONED LLM PROMPT
+                # =================================================
 
-                span.set_attribute(
-                    "agent.retrieval.called",
-                    False,
+                llm_prompt = AGENT_SYSTEM_PROMPT.format(
+                    user_message=request.message,
+                    retrieved_context=results,
+                    memory=memory_data,
                 )
 
-            # =================================================
-            # MEMORY ROUTE
-            # =================================================
-
-            if route == "memory":
+                # =================================================
+                # LLM ROUTE
+                # =================================================
 
                 with tracer.start_as_current_span(
-                    "agent.route.memory"
+                    "agent.route.llm"
                 ) as route_span:
 
                     route_span.set_attribute(
                         "agent.route",
-                        "memory",
+                        route,
                     )
 
-                    memory_response = (
+                    route_span.set_attribute(
+                        "agent.prompt.version",
+                        AGENT_PROMPT_VERSION,
+                    )
+
+                    llm_response = (
                         await client.post(
-                            "http://memory:8003/memory",
+                            "http://llm:8004/generate",
                             json={
                                 "user_id": request.user_id,
-                                "content": request.message,
+                                "prompt": llm_prompt,
                             },
                             timeout=10.0,
                         )
                     )
 
-                    memory_response.raise_for_status()
+                    llm_response.raise_for_status()
 
-                    memory_data = (
-                        memory_response.json()
+                    llm_data = (
+                        llm_response.json()
                     )
 
                     span.set_attribute(
-                        "agent.memory.called",
+                        "agent.llm.called",
                         True,
                     )
 
                     span.set_attribute(
-                        "agent.memory.id",
-                        memory_data["id"],
+                        "agent.llm.provider",
+                        llm_data.get(
+                            "provider",
+                            "unknown",
+                        ),
                     )
 
-            else:
+                    # ------------------------------------------------
+                    # MODEL METADATA
+                    # ------------------------------------------------
 
-                span.set_attribute(
-                    "agent.memory.called",
-                    False,
-                )
+                    model_name = llm_data.get(
+                        "model"
+                    )
 
-            # =================================================
-            # BUILD VERSIONED LLM PROMPT
-            # =================================================
+                    if model_name:
 
-            llm_prompt = AGENT_SYSTEM_PROMPT.format(
-                user_message=request.message,
-                retrieved_context=results,
-                memory=memory_data,
+                        span.set_attribute(
+                            "agent.llm.model",
+                            model_name,
+                        )
+
+                        agent_llm_requests_total.labels(
+                            model=model_name
+                        ).inc()
+
+                    else:
+
+                        agent_llm_requests_total.labels(
+                            model="unknown"
+                        ).inc()
+
+            # ====================================================
+            # FINAL RESPONSE
+            # ====================================================
+
+            answer = llm_data["response"]
+
+            return ExecuteResponse(
+                result=answer,
+                service="agent-service",
+                prompt_version=AGENT_PROMPT_VERSION,
+                model=llm_data.get("model"),
             )
 
-            # =================================================
-            # LLM ROUTE
-            # =================================================
+    finally:
 
-            with tracer.start_as_current_span(
-                "agent.route.llm"
-            ) as route_span:
+        # ========================================================
+        # PROMETHEUS REQUEST METRICS
+        # ========================================================
 
-                route_span.set_attribute(
-                    "agent.route",
-                    route,
-                )
+        agent_requests_total.labels(
+            route=route
+        ).inc()
 
-                route_span.set_attribute(
-                    "agent.prompt.version",
-                    AGENT_PROMPT_VERSION,
-                )
-
-                llm_response = (
-                    await client.post(
-                        "http://llm:8004/generate",
-                        json={
-                            "user_id": request.user_id,
-                            "prompt": llm_prompt,
-                        },
-                        timeout=10.0,
-                    )
-                )
-
-                llm_response.raise_for_status()
-
-                llm_data = (
-                    llm_response.json()
-                )
-
-                span.set_attribute(
-                    "agent.llm.called",
-                    True,
-                )
-
-                span.set_attribute(
-                    "agent.llm.provider",
-                    llm_data.get(
-                        "provider",
-                        "unknown",
-                    ),
-                )
-
-                # ------------------------------------------------
-                # MODEL METADATA
-                # ------------------------------------------------
-
-                model_name = llm_data.get(
-                    "model"
-                )
-
-                if model_name:
-                    span.set_attribute(
-                        "agent.llm.model",
-                        model_name,
-                    )
-
-        # ====================================================
-        # FINAL RESPONSE
-        # ====================================================
-
-        answer = llm_data["response"]
-
-        return ExecuteResponse(
-            result=answer,
-            service="agent-service",
-            prompt_version=AGENT_PROMPT_VERSION,
-            model=llm_data.get("model"),
+        agent_request_duration_seconds.labels(
+            route=route
+        ).observe(
+            time.perf_counter() - start_time
         )

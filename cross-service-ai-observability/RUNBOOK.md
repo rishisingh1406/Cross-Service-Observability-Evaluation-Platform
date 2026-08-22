@@ -852,6 +852,48 @@ That is the difference between simply collecting telemetry and actually using ob
 
 ---
 
+# 19. Incident #2 — Retrieval / Prompt Correctness Regression
+
+## Objective
+
+This incident demonstrates a different class of production failure in an AI system:
+
+> A system can be operationally healthy while producing incorrect behavior because an important prompt instruction was removed.
+
+Unlike the latency incidents, this failure was not primarily diagnosed through Prometheus metrics or distributed traces.
+
+The failure was detected through the evaluation system.
+
+The purpose of this exercise was to demonstrate that:
+
+- not every AI failure appears as a latency problem,
+- some behavioral regressions are detected first by evaluations,
+- evaluators themselves can contain weaknesses,
+- regression tests can permanently protect important behavioral requirements.
+
+The debugging workflow was:
+
+```text
+Prompt change
+    ↓
+Evaluation
+    ↓
+Behavioral regression
+    ↓
+Inspect evaluator
+    ↓
+Evaluator weakness discovered
+    ↓
+Strengthen evaluator
+    ↓
+Restore prompt instruction
+    ↓
+Permanent regression fixture
+    ↓
+Verification
+
+---
+
 # Conclusion
 
 The latency debugging exercises demonstrated that a distributed AI system can be investigated systematically using telemetry rather than guesswork.

@@ -7,3 +7,5 @@ opentelemetry-exporter-otlp-proto-grpc
 opentelemetry-instrumentation-fastapi
 opentelemetry-instrumentation-httpx
 httpx
+
+prometheus-client

@@ -40,8 +40,12 @@ def evaluate_prompt_case(
 
     elif case.expected_behavior == "use_retrieved_context":
 
+        required_instruction = (
+            "use retrieved context when provided"
+        )
+
         passed = (
-            "retrieved context" in prompt_lower
+            required_instruction in prompt_lower
         )
 
         if not passed:
@@ -49,7 +53,7 @@ def evaluate_prompt_case(
                 case_name=case.name,
                 passed=False,
                 failure=(
-                    "Prompt does not instruct "
+                    "Prompt does not explicitly instruct "
                     "the agent to use retrieved context."
                 ),
             )
